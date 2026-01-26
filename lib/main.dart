@@ -51,9 +51,6 @@ class HomeTabs extends StatefulWidget {
 class _HomeTabsState extends State<HomeTabs> {
   int index = 0;
 
-  // 月初：患者リスト（まずはメモリ上）
-  final List<Patient> patients = [];
-
   @override
   Widget build(BuildContext context) {
     final pages = [
@@ -81,6 +78,12 @@ class _HomeTabsState extends State<HomeTabs> {
   }
 }
 
+class Reminder {
+  Reminder({required this.title, this.done = false});
+  String title;
+  bool done;
+}
+
 class MonthlyPage extends StatefulWidget {
   const MonthlyPage({super.key});
 
@@ -89,7 +92,6 @@ class MonthlyPage extends StatefulWidget {
 }
 
 class _MonthlyPageState extends State<MonthlyPage> {
-  // 仮データ（あとで追加できるようにする）
   final List<Patient> patients = [
     Patient(
       name: 'Aさん',
@@ -110,43 +112,34 @@ class _MonthlyPageState extends State<MonthlyPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('月初チェック')),
-      body: patients.isEmpty
-          ? const Center(child: Text('患者さんがまだいないよ'))
-          : ListView.builder(
-              itemCount: patients.length,
-              itemBuilder: (context, i) {
-                final p = patients[i];
-
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: ExpansionTile(
-                    title: Text(p.name),
-                    children: [
-                      for (int j = 0; j < p.checks.length; j++)
-                        CheckboxListTile(
-                          title: Text(p.checks[j].title),
-                          value: p.checks[j].done,
-                          onChanged: (v) {
-                            setState(() {
-                              p.checks[j].done = v ?? false;
-                            });
-                          },
-                        ),
-                    ],
+      body: ListView.builder(
+        itemCount: patients.length,
+        itemBuilder: (context, i) {
+          final p = patients[i];
+          return Card(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: ExpansionTile(
+              title: Text(p.name),
+              children: [
+                for (int j = 0; j < p.checks.length; j++)
+                  CheckboxListTile(
+                    title: Text(p.checks[j].title),
+                    value: p.checks[j].done,
+                    onChanged: (v) {
+                      setState(() {
+                        p.checks[j].done = v ?? false;
+                      });
+                    },
                   ),
-                );
-              },
+              ],
             ),
+          );
+        },
+      ),
     );
   }
 }
 
-
-class Reminder {
-  Reminder({required this.title, this.done = false});
-  String title;
-  bool done;
-}
 
 class ReminderPage extends StatefulWidget {
   const ReminderPage({super.key});
