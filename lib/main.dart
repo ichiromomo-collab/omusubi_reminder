@@ -89,44 +89,58 @@ class MonthlyPage extends StatefulWidget {
 }
 
 class _MonthlyPageState extends State<MonthlyPage> {
-final List<Patient> patients = [
+  // 仮データ（あとで追加できるようにする）
+  final List<Patient> patients = [
     Patient(
       name: 'Aさん',
       checks: [
-        MonthlyCheck(title: '保険証確認'),
-        MonthlyCheck(title: '医療証確認'),
+        MonthlyCheck(title: '保険証チェック'),
+        MonthlyCheck(title: '医療証チェック'),
       ],
     ),
     Patient(
       name: 'Bさん',
       checks: [
-        MonthlyCheck(title: '保険証確認'),
+        MonthlyCheck(title: '保険証チェック'),
       ],
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      children: patients.map((patient) {
-        return ExpansionTile(
-          title: Text(patient.name),
-          children: patient.checks.map((check) {
-            return CheckboxListTile(
-              title: Text(check.title),
-              value: check.done,
-              onChanged: (v) {
-                setState(() {
-                  check.done = v ?? false;
-                });
+    return Scaffold(
+      appBar: AppBar(title: const Text('月初チェック')),
+      body: patients.isEmpty
+          ? const Center(child: Text('患者さんがまだいないよ'))
+          : ListView.builder(
+              itemCount: patients.length,
+              itemBuilder: (context, i) {
+                final p = patients[i];
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: ExpansionTile(
+                    title: Text(p.name),
+                    children: [
+                      for (int j = 0; j < p.checks.length; j++)
+                        CheckboxListTile(
+                          title: Text(p.checks[j].title),
+                          value: p.checks[j].done,
+                          onChanged: (v) {
+                            setState(() {
+                              p.checks[j].done = v ?? false;
+                            });
+                          },
+                        ),
+                    ],
+                  ),
+                );
               },
-            );
-          }).toList(),
-        );
-      }).toList(),
+            ),
     );
   }
 }
+
 
 class Reminder {
   Reminder({required this.title, this.done = false});
