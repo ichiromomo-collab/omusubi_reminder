@@ -156,6 +156,33 @@ class _MonthlyPageState extends State<MonthlyPage> {
       p.checks.insert(0, MonthlyCheck(title: title));
     });
   }
+Future<void> deletePatient(int i) async {
+  final name = patients[i].name;
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('患者さんを削除しますか？'),
+      content: Text('「$name」を削除します。\n（中のチェックも全部消えます）'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('やめる'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('削除'),
+        ),
+      ],
+    ),
+  );
+
+  if (ok == true) {
+    setState(() {
+      patients.removeAt(i);
+    });
+  }
+}
 
   Future<void> deleteCheckItem(Patient p, int j) async {
     final t = p.checks[j].title;
@@ -213,43 +240,46 @@ class _MonthlyPageState extends State<MonthlyPage> {
               itemBuilder: (context, i) {
                 final p = patients[i];
 
-                return Card(
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  child: ExpansionTile(
-                    title: Text(p.name),
-                    trailing: IconButton(
-                      tooltip: 'チェック追加',
-                      icon: const Icon(Icons.add_task),
-                      onPressed: () => addCheckItem(p),
-                    ),
-                    children: [
-                      if (p.checks.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Text('${p.name} のチェックがまだないよ'),
-                        ),
-                      for (int j = 0; j < p.checks.length; j++)
-                        ListTile(
-                          leading: Checkbox(
-                            value: p.checks[j].done,
-                            onChanged: (v) {
-                              setState(() {
-                                p.checks[j].done = v ?? false;
-                              });
-                            },
-                          ),
-                          title: Text(p.checks[j].title),
-                          onTap: () {
-                            setState(() {
-                              p.checks[j].done = !p.checks[j].done;
-                            });
-                          },
-                          onLongPress: () => deleteCheckItem(p, j),
-                        ),
-                    ],
-                  ),
-                );
+             return Card(
+           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+           child: GestureDetector(
+           onLongPress: () => deletePatient(i),
+           child: ExpansionTile(
+           title: Text(p.name),
+           trailing: IconButton(
+           tooltip: 'チェック追加',
+           icon: const Icon(Icons.add_task),
+           onPressed: () => addCheckItem(p),
+            ),
+           children: [
+            if (p.checks.isEmpty)
+            Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text('${p.name} のチェックがまだないよ'),
+             ),
+             for (int j = 0; j < p.checks.length; j++)
+            ListTile(
+            leading: Checkbox(
+              value: p.checks[j].done,
+              onChanged: (v) {
+                setState(() {
+                  p.checks[j].done = v ?? false;
+                });
+              },
+            ),
+            title: Text(p.checks[j].title),
+            onTap: () {
+              setState(() {
+                p.checks[j].done = !p.checks[j].done;
+              });
+            },
+            onLongPress: () => deleteCheckItem(p, j),
+          ),
+      ],
+    ),
+  ),
+);
+
               },
             ),
       floatingActionButton: FloatingActionButton(
