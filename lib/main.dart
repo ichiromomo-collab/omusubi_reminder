@@ -20,6 +20,11 @@ class MonthlyCheck {
   });
 }
 
+class Reminder {
+  Reminder({required this.title, this.done = false});
+  String title;
+  bool done;
+}
 
 void main() {
   runApp(const MyApp());
@@ -55,7 +60,7 @@ class _HomeTabsState extends State<HomeTabs> {
   Widget build(BuildContext context) {
     final pages = [
       const ReminderPage(), // 今日
-      const MonthlyPage(),  // 月初
+      const MonthlyPage(), // 月初
     ];
 
     return Scaffold(
@@ -78,11 +83,7 @@ class _HomeTabsState extends State<HomeTabs> {
   }
 }
 
-class Reminder {
-  Reminder({required this.title, this.done = false});
-  String title;
-  bool done;
-}
+// -------------------- 月初チェック --------------------
 
 class MonthlyPage extends StatefulWidget {
   const MonthlyPage({super.key});
@@ -108,38 +109,158 @@ class _MonthlyPageState extends State<MonthlyPage> {
     ),
   ];
 
+  Future<String?> _inputDialog({required String title, String hint = ''}) async {
+    final c = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          decoration: InputDecoration(hintText: hint),
+          onSubmitted: (_) => Navigator.pop(context, c.text.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, c.text.trim()),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> addPatient() async {
+    final name =
+        await _inputDialog(title: '患者さんを追加', hint: '例：山田太郎さん / Aさん');
+    if (name == null || name.isEmpty) return;
+
+    setState(() {
+      patients.insert(0, Patient(name: name, checks: []));
+    });
+  }
+
+  Future<void> addCheckItem(Patient p) async {
+    final title = await _inputDialog(
+      title: '${p.name} のチェックを追加',
+      hint: '例：保険証確認 / 限度額認定証',
+    );
+    if (title == null || title.isEmpty) return;
+
+    setState(() {
+      p.checks.insert(0, MonthlyCheck(title: title));
+    });
+  }
+
+  Future<void> deleteCheckItem(Patient p, int j) async {
+    final t = p.checks[j].title;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('チェックを削除しますか？'),
+        content: Text('「$t」を削除します。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('やめる'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true) {
+      setState(() {
+        p.checks.removeAt(j);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final total = patients.fold<int>(0, (sum, p) => sum + p.checks.length);
+    final done = patients.fold<int>(
+      0,
+      (sum, p) => sum + p.checks.where((c) => c.done).length,
+    );
+
     return Scaffold(
-      appBar: AppBar(title: const Text('月初チェック')),
-      body: ListView.builder(
-        itemCount: patients.length,
-        itemBuilder: (context, i) {
-          final p = patients[i];
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: ExpansionTile(
-              title: Text(p.name),
-              children: [
-                for (int j = 0; j < p.checks.length; j++)
-                  CheckboxListTile(
-                    title: Text(p.checks[j].title),
-                    value: p.checks[j].done,
-                    onChanged: (v) {
-                      setState(() {
-                        p.checks[j].done = v ?? false;
-                      });
-                    },
-                  ),
-              ],
+      appBar: AppBar(
+        title: const Text('月初チェック'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(44),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('合計 $total / 完了 $done'),
             ),
-          );
-        },
+          ),
+        ),
+      ),
+      body: patients.isEmpty
+          ? const Center(child: Text('右下の＋で患者さんを追加してね'))
+          : ListView.builder(
+              itemCount: patients.length,
+              itemBuilder: (context, i) {
+                final p = patients[i];
+
+                return Card(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: ExpansionTile(
+                    title: Text(p.name),
+                    trailing: IconButton(
+                      tooltip: 'チェック追加',
+                      icon: const Icon(Icons.add_task),
+                      onPressed: () => addCheckItem(p),
+                    ),
+                    children: [
+                      if (p.checks.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text('${p.name} のチェックがまだないよ'),
+                        ),
+                      for (int j = 0; j < p.checks.length; j++)
+                        ListTile(
+                          leading: Checkbox(
+                            value: p.checks[j].done,
+                            onChanged: (v) {
+                              setState(() {
+                                p.checks[j].done = v ?? false;
+                              });
+                            },
+                          ),
+                          title: Text(p.checks[j].title),
+                          onTap: () {
+                            setState(() {
+                              p.checks[j].done = !p.checks[j].done;
+                            });
+                          },
+                          onLongPress: () => deleteCheckItem(p, j),
+                        ),
+                    ],
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: addPatient,
+        child: const Icon(Icons.person_add),
       ),
     );
   }
 }
 
+// -------------------- 今日リマインダー --------------------
 
 class ReminderPage extends StatefulWidget {
   const ReminderPage({super.key});
@@ -171,7 +292,8 @@ class _ReminderPageState extends State<ReminderPage> {
             controller: controller,
             autofocus: true,
             decoration: const InputDecoration(hintText: '例：鍵持った？'),
-            onSubmitted: (_) => Navigator.pop(context, controller.text.trim()),
+            onSubmitted: (_) =>
+                Navigator.pop(context, controller.text.trim()),
           ),
           actions: [
             TextButton(
@@ -179,7 +301,8 @@ class _ReminderPageState extends State<ReminderPage> {
               child: const Text('キャンセル'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              onPressed: () =>
+                  Navigator.pop(context, controller.text.trim()),
               child: const Text('追加'),
             ),
           ],
@@ -245,10 +368,7 @@ class _ReminderPageState extends State<ReminderPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(
-                '合計 ${reminders.length} / 完了 $doneCount',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              child: Text('合計 ${reminders.length} / 完了 $doneCount'),
             ),
           ),
         ),
@@ -286,7 +406,8 @@ class _ReminderPageState extends State<ReminderPage> {
                         title: Text(
                           r.title,
                           style: TextStyle(
-                            decoration: r.done ? TextDecoration.lineThrough : null,
+                            decoration:
+                                r.done ? TextDecoration.lineThrough : null,
                           ),
                         ),
                         onTap: () => toggleDone(index),
