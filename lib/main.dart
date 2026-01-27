@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 class Patient {
+  final String id;
   final String name;
   List<MonthlyCheck> checks;
 
   Patient({
+    required this.id,
     required this.name,
     required this.checks,
   });
@@ -93,8 +95,10 @@ class MonthlyPage extends StatefulWidget {
 }
 
 class _MonthlyPageState extends State<MonthlyPage> {
+  // 患者リスト（メモリ上）
   final List<Patient> patients = [
     Patient(
+      id: 'a',
       name: 'Aさん',
       checks: [
         MonthlyCheck(title: '保険証チェック'),
@@ -102,12 +106,16 @@ class _MonthlyPageState extends State<MonthlyPage> {
       ],
     ),
     Patient(
+      id: 'b',
       name: 'Bさん',
       checks: [
         MonthlyCheck(title: '保険証チェック'),
       ],
     ),
   ];
+
+  // ★ 展開状態（患者ごとに覚える）
+  final Map<String, bool> _expanded = {};
 
   Future<String?> _inputDialog({required String title, String hint = ''}) async {
     final c = TextEditingController();
@@ -136,61 +144,48 @@ class _MonthlyPageState extends State<MonthlyPage> {
   }
 
   Future<void> addPatient() async {
-    final name =
-        await _inputDialog(title: '患者さんを追加', hint: '例：山田太郎さん / Aさん');
+    final name = await _inputDialog(title: '患者さんを追加', hint: '例：山田太郎さん / Aさん');
     if (name == null || name.isEmpty) return;
 
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+
     setState(() {
-      patients.insert(0, Patient(name: name, checks: []));
+      patients.insert(0, Patient(id: id, name: name, checks: []));
+      _expanded[id] = true; // ★追加直後は開いてあげる
     });
   }
 
   Future<void> addCheckItem(Patient p) async {
-    final title = await _inputDialog(
-      title: '${p.name} のチェックを追加',
-      hint: '例：保険証確認 / 限度額認定証',
-    );
+    final title = await _inputDialog(title: '${p.name} のチェックを追加', hint: '例：保険証確認 / 限度額認定証');
     if (title == null || title.isEmpty) return;
 
     setState(() {
       p.checks.insert(0, MonthlyCheck(title: title));
+      _expanded[p.id] = true; // ★追加したら開く
     });
   }
-Future<void> deletePatient(int i) async {
-  final name = patients[i].name;
 
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('患者さんを削除しますか？'),
-      content: Text('「$name」を削除します。\n（中のチェックも全部消えます）'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('やめる'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('削除'),
-        ),
-      ],
-    ),
-  );
-
-  if (ok == true) {
-    setState(() {
-      patients.removeAt(i);
-    });
+  Color _rateColor(double rate) {
+    final cs = Theme.of(context).colorScheme;
+    if (rate >= 1.0) return cs.tertiary;        // 100% 完了
+    if (rate >= 0.5) return cs.primary;         // 半分以上
+    if (rate > 0.0) return cs.secondary;        // ちょい進んでる
+    return cs.outline;                           // 0%
   }
-}
 
-  Future<void> deleteCheckItem(Patient p, int j) async {
-    final t = p.checks[j].title;
+  double _patientRate(Patient p) {
+    if (p.checks.isEmpty) return 0.0;
+    final done = p.checks.where((c) => c.done).length;
+    return done / p.checks.length;
+  }
+
+  Future<void> _deleteCheckWithConfirm(Patient p, int j) async {
+    final title = p.checks[j].title;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('チェックを削除しますか？'),
-        content: Text('「$t」を削除します。'),
+        content: Text('「$title」を削除します。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -203,21 +198,63 @@ Future<void> deletePatient(int i) async {
         ],
       ),
     );
+    if (ok != true) return;
 
-    if (ok == true) {
-      setState(() {
-        p.checks.removeAt(j);
-      });
-    }
+    setState(() {
+      p.checks.removeAt(j);
+    });
+  }
+
+  Future<void> _deletePatientWithUndo(int index) async {
+    final p = patients[index];
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('患者さんを削除しますか？'),
+        content: Text('「${p.name}」とチェック一覧を削除します。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('やめる'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() {
+      patients.removeAt(index);
+      _expanded.remove(p.id);
+    });
+
+    // ★ スナックバーで「元に戻す」
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('「${p.name}」を削除しました'),
+        action: SnackBarAction(
+          label: '元に戻す',
+          onPressed: () {
+            setState(() {
+              patients.insert(index, p);
+              _expanded[p.id] = true;
+            });
+          },
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // 上の「合計 / 完了」
     final total = patients.fold<int>(0, (sum, p) => sum + p.checks.length);
-    final done = patients.fold<int>(
-      0,
-      (sum, p) => sum + p.checks.where((c) => c.done).length,
-    );
+    final done = patients.fold<int>(0, (sum, p) => sum + p.checks.where((c) => c.done).length);
 
     return Scaffold(
       appBar: AppBar(
@@ -233,55 +270,111 @@ Future<void> deletePatient(int i) async {
           ),
         ),
       ),
+
+      // ★空表示メッセージ（やさしく）
       body: patients.isEmpty
-          ? const Center(child: Text('右下の＋で患者さんを追加してね'))
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'まだ患者さんがいないよ。\n右下の＋で追加してね 🍙',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
           : ListView.builder(
               itemCount: patients.length,
               itemBuilder: (context, i) {
                 final p = patients[i];
 
-             return Card(
-           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-           child: GestureDetector(
-           onLongPress: () => deletePatient(i),
-           child: ExpansionTile(
-           title: Text(p.name),
-           trailing: IconButton(
-           tooltip: 'チェック追加',
-           icon: const Icon(Icons.add_task),
-           onPressed: () => addCheckItem(p),
-            ),
-           children: [
-            if (p.checks.isEmpty)
-            Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text('${p.name} のチェックがまだないよ'),
-             ),
-             for (int j = 0; j < p.checks.length; j++)
-            ListTile(
-            leading: Checkbox(
-              value: p.checks[j].done,
-              onChanged: (v) {
-                setState(() {
-                  p.checks[j].done = v ?? false;
-                });
-              },
-            ),
-            title: Text(p.checks[j].title),
-            onTap: () {
-              setState(() {
-                p.checks[j].done = !p.checks[j].done;
-              });
-            },
-            onLongPress: () => deleteCheckItem(p, j),
-          ),
-      ],
-    ),
-  ),
-);
+                final rate = _patientRate(p);
+                final rateColor = _rateColor(rate);
 
+                final remaining = p.checks.where((c) => !c.done).length;
+                final isExpanded = _expanded[p.id] ?? false;
+
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: ExpansionTile(
+                    initiallyExpanded: isExpanded,
+                    onExpansionChanged: (v) => setState(() => _expanded[p.id] = v),
+
+                    // ★患者長押しで削除（患者ごと）
+                    title: GestureDetector(
+                      onLongPress: () => _deletePatientWithUndo(i),
+                      child: Row(
+                        children: [
+                          Icon(Icons.circle, size: 12, color: rateColor), // ★完了率で色変える
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(p.name)),
+                          const SizedBox(width: 8),
+                          Text(
+                            p.checks.isEmpty ? '—' : '${(rate * 100).round()}%',
+                            style: TextStyle(color: rateColor),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    trailing: IconButton(
+                      tooltip: 'チェック追加',
+                      icon: Icon(Icons.add_task, color: rateColor), // ★アイコン色も完了率で
+                      onPressed: () => addCheckItem(p),
+                    ),
+
+                    children: [
+                      // ★患者ごとの空表示メッセージ（やさしく）
+                      if (p.checks.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text('まだチェックがないよ。右の＋で追加してね 😊'),
+                        ),
+
+                      for (int j = 0; j < p.checks.length; j++)
+                        ListTile(
+                          leading: Checkbox(
+                            value: p.checks[j].done,
+                            onChanged: (v) {
+                              setState(() {
+                                p.checks[j].done = v ?? false;
+
+                                // ★「完了数が0になったら自動で折りたたむ」
+                                final remainingNow = p.checks.where((c) => !c.done).length;
+                                if (remainingNow == 0) {
+                                  _expanded[p.id] = false;
+                                }
+                              });
+                            },
+                          ),
+                          title: Text(p.checks[j].title),
+                          onTap: () {
+                            setState(() {
+                              p.checks[j].done = !p.checks[j].done;
+
+                              // ★同じく自動で折りたたむ
+                              final remainingNow = p.checks.where((c) => !c.done).length;
+                              if (remainingNow == 0) {
+                                _expanded[p.id] = false;
+                              }
+                            });
+                          },
+                          onLongPress: () => _deleteCheckWithConfirm(p, j), // チェック削除
+                        ),
+
+                      if (p.checks.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: Text(
+                            remaining == 0 ? '全部完了！おつかれさま 🍵' : '残り $remaining 件',
+                            style: TextStyle(color: Theme.of(context).colorScheme.outline),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
               },
             ),
+
       floatingActionButton: FloatingActionButton(
         onPressed: addPatient,
         child: const Icon(Icons.person_add),
@@ -423,7 +516,7 @@ class _ReminderPageState extends State<ReminderPage> {
           const Divider(height: 1),
           Expanded(
             child: reminders.isEmpty
-                ? const Center(child: Text('＋で追加してね'))
+                ? const Center(child: Text('＋で追加してください'))
                 : ListView.builder(
                     itemCount: reminders.length,
                     itemBuilder: (context, index) {
